@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta name="file" content="set_bounds.html">
+    <meta name="author" content="Joe Belson 20210822">
+    <meta name="what" content="esp8266 html for WiFi connected temp/humidity bounds.">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Set Temp / Humidity Bounds for 110VAC relays</title>
+  </head>
+
+
+  <body style="text-align: left;">
+    <hr>
+      <table class="calibrate">
+        <caption>Set Temp & Humidty Relays SSID : PWD</caption>
+          <thead>
+              <tr>
+                  <th>SSID</th>
+                  <th>PWD</th>
+              </tr>
+          </thead>
+          <tbody>
+              <tr>
+                  <td><input type="text" id="SSID"></td>
+                  <td><input type="text" id="PWD"></td>
+                  <td><input type="submit" id="submit" onclick="f_submit()"></td>
+              </tr>
+          </tbody>
+      </table>
+      <br><p id="status"></p>
+    </body>
+    <script language = "javascript" type = "text/javascript">
+  
+        let webSock       = new WebSocket('ws://'+window.location.hostname+':80');
+        webSock.onopen    = function(evt){f_webSockOnOpen(evt);}
+        webSock.onmessage = function(evt){f_webSockOnMessage(evt);}
+        webSock.onerror   = function(evt){f_webSockOnError(evt);}
+  
+        function f_webSockOnMessage(evt){
+          if(typeof evt.data === "string"){
+              document.getElementById("status").innerHTML=evt.data;
+          }
+        }
+        function f_webSockOnOpen(evt){}
+        function f_webSockOnError(evt){}
+        function f_submit(){
+          var str= '{"SSID":"0","PWD":"0"}';
+          j=JSON.parse(str);
+            for(var key in j)j[key]=document.getElementById(key).value;
+            console.log(JSON.stringify(j));
+
+          webSock.send(JSON.stringify(j));
+        }
+    </script>
+  </html>
+  

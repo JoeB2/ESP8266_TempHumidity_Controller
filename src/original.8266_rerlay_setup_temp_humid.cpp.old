@@ -1,0 +1,195 @@
+#include  <Arduino.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266WiFiType.h>
+#include <queue.h>
+#include <ESPAsyncWebServer.h>
+#include <Adafruit_Sensor.h>
+#include "DHT.h"              // dropped .h & .cpp in ino folder
+
+/*
+#include <D:\Arduino IDE\arduino-1.8.10\portable\packages\esp8266\hardware\esp8266\2.6.2\libraries\ESP8266WiFi\src\ESP8266WiFi.h>
+#include <D:\Arduino IDE\arduino-1.8.10\portable\packages\esp8266\hardware\esp8266\2.6.2\libraries\ESP8266WiFi\src\ESP8266WiFiType.h>
+#include <D:\Arduino IDE\arduino-1.8.10\portable\packages\esp8266\tools\xtensa-lx106-elf-gcc\2.5.0-4-b40a506\xtensa-lx106-elf\include\sys\queue.h>
+*/
+
+
+#define DHTTYPE DHT11
+#define HEATER1_pin 16
+#define HEATER2_pin 14
+#define HUMID1_pin  13
+
+  AsyncWebServer server(80);// Create AsyncWebServer object on port 80
+
+  // Replace with your network credentials
+  const char* ssid                  = "JRJAG2";
+  const char* password           = "GeorgeTheDogy";
+  unsigned long interval            = 15000;                  // Updates DHT readings every 15 seconds
+  unsigned long previousMillis  = millis()-interval;      // stores last time DHT was updated; init with interval seconds ago.
+
+  // want to store in EEPROM and provide updates via web page button
+  float t1_target        = 70
+      , h1_target        = 80
+      , t2_target        = 75; // target temp & humidity readings 
+  
+  DHT dht1(1, DHTTYPE);
+  DHT dht2(3, DHTTYPE);
+
+  // current temperature & humidity, updated in loop()
+  float t1 = 900.0; float h1 = -210.0;  // values chosen to indicate startup in Serial & html
+  float t2 = 0.0; float h2 = 0.0;
+
+  void heaterOn(int heater, bool val);
+  void humidOn(int humid, bool val);
+
+  const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML><html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+  <style>
+    html {
+     font-family: Arial;
+     display: inline-block;
+     margin: 0px auto;
+     text-align: center;
+    }
+    h2 { font-size: 3.0rem; }
+    p { font-size: 3.0rem; }
+    .units { font-size: 1.2rem; }
+    .dht-labels{
+      font-size: 1.5rem;
+      vertical-align:middle;
+      padding-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+  <h2>ESP8266 DHT Server</h2>
+  <p>
+    <i class="fas fa-thermometer-half" style="color:#059e8a;"></i> 
+    <span class="dht-labels">Temperature1</span>
+    <span id="temperature1">%TEMPERATURE1%</span>
+    <sup class="units">&deg;F</sup>
+    <i class="fas fa-thermometer-half" style="color:#059e8a;"></i> 
+    <span class="dht-labels">Temperature2</span> 
+    <span id="temperature2">%TEMPERATURE2%</span>
+    <sup class="units">&deg;F</sup>
+  </p>
+  <p>
+    <i class="fas fa-tint" style="color:#00add6;"></i> 
+    <span class="dht-labels">Humidity1</span>
+    <span id="humidity1">%HUMIDITY1%</span>
+    <sup class="units">%</sup>
+  </p>
+</body>
+<script>
+setInterval(function ( ) {
+  var xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() {
+    if (this.readyState == 4 && this.status == 200) {
+      document.getElementById("temperature1").innerHTML = this.responseText;
+    }
+  };
+  xhttp.open("GET", "/temperature1", true); xhttp.send();}, 10000 );
+
+  setInterval(function ( ) {
+    var xhttp = new XMLHttpRequest();
+    xhttp.onreadystatechange = function() {
+    if (this.readyState == 4 && this.status == 200) {
+      document.getElementById("temperature2").innerHTML = this.responseText;
+    }
+  };
+
+  xhttp.open("GET", "/temperature2", true); xhttp.send();}, 10000 );
+
+  setInterval(function ( ) {
+    var xhttp = new XMLHttpRequest();
+    xhttp.onreadystatechange = function() {
+    if (this.readyState == 4 && this.status == 200) {
+      document.getElementById("humidity1").innerHTML = this.responseText;
+    }
+  };
+
+  xhttp.open("GET", "/humidity1", true);xhttp.send();}, 10000 );
+
+  setInterval(function ( ) {
+    var xhttp = new XMLHttpRequest();
+    xhttp.onreadystatechange = function() {
+    if (this.readyState == 4 && this.status == 200) {
+      document.getElementById("humidity2").innerHTML = this.responseText;
+    }
+  };
+
+  xhttp.open("GET", "/humidity2", true); xhttp.send();}, 10000 );
+</script>
+</html>)rawliteral";
+
+// Replaces placeholder with DHT values
+String processor(const String& var){
+// Serial.println(var);
+  if(var == "T1"){return String(t1);}else 
+  if(var == "T2"){return String(t2);}else 
+  if(var == "H1"){return String(h1);}else 
+  if(var == "H2"){return String(h2);}
+  return String();
+}
+
+void setup(){
+  // Serial port for debugging purposes
+  //  Serial.begin(115200); pinMode(0, INPUT_PULLUP);  // we test for zero volts and & print debug info
+
+
+  // INPUT, OUTPUT, or INPUT_PULLUP
+  pinMode(1, INPUT_PULLUP);  //GPIO 1 (TX) swap the pin to sensor input. (DHT11_1 sensor for #1 heater & Humid)
+  pinMode(3, INPUT_PULLUP);  //GPIO 3 (RX) swap the pin to sensor input. (DHT11_2 sensor for #2 heater)
+
+  pinMode(HEATER1_pin, OUTPUT); // Heater #1
+  pinMode(HEATER2_pin, OUTPUT); // Heater #2
+  pinMode(HUMID1_pin, OUTPUT);  // Humid #1
+  
+  dht1.begin(); dht2.begin();
+
+  // Connect to Wi-Fi
+  WiFi.begin(ssid, password);
+  Serial.println("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+  }
+
+  // Route for root / web page
+  server.on("/"                       , HTTP_GET, [](AsyncWebServerRequest *request){request->send_P(200, "text/html", index_html, processor);});
+  server.on("/temperature1" , HTTP_GET, [](AsyncWebServerRequest *request){request->send_P(200, "text/plain", String(t1).c_str());});
+  server.on("/humidity1"      , HTTP_GET, [](AsyncWebServerRequest *request){request->send_P(200, "text/plain", String(h1).c_str());});
+  server.on("/temperature2" , HTTP_GET, [](AsyncWebServerRequest *request){request->send_P(200, "text/plain", String(t2).c_str());});
+  server.on("/humidity2"      , HTTP_GET, [](AsyncWebServerRequest *request){request->send_P(200, "text/plain", String(h2).c_str());});
+
+  // Start server
+  server.begin();
+}
+ 
+void loop(){  
+  if (millis() - previousMillis >= interval){
+    // get temps and humidity
+    t1 = dht1.readTemperature(true);h1 = dht1.readHumidity();
+    t2 = dht2.readTemperature(true);h2 = dht2.readHumidity();
+
+    // set heater 1 & heater 2 and humdidity 1 on/off depending on temps and humidity
+    if(t1 <= t1_target-3)heaterOn(HEATER1_pin, true); else if(t1 >= t1_target+3)heaterOn(HEATER1_pin, false);
+    if(t2 <= t2_target-3)heaterOn(HEATER2_pin, true); else if(t2 >= t2_target+3)heaterOn(HEATER2_pin, false);
+
+    if(h1 <= h1_target-5)humidOn(HUMID1_pin, true); else if(h1 >= h1_target+5)humidOn(HUMID1_pin, false);
+//    if(h2 <= h2_target-5)humidOn(HUMID1_pin, true); else if(h2 >= h2_target+5)humidOn(HUMID2_pin, false);
+
+    previousMillis = millis();
+  }
+
+  if(!digitalRead(0))
+    printf("T1: %d\t R1: %f\t\t h1: %d\t R2: %d\t\t\tT2: %d\t R3: %d\n"
+            , t1, digitalRead(HEATER1_pin), h1, digitalRead(HUMID1_pin), t2, digitalRead(HEATER2_pin));
+  
+  delay(1000);
+}
+
+  void heaterOn(int heater, bool val){digitalWrite(heater, val);}
+  void humidOn(int humid, bool val){digitalWrite(humid, val);}
+  

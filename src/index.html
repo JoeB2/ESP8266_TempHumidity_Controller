@@ -1,0 +1,113 @@
+<!DOCTYPE HTML><html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+  <style>
+    html {
+     font-family: Arial;
+     display: inline-block;
+     margin: 0px auto;
+     text-align: left;
+    }
+    h2 { font-size: 3.0rem; }
+    p { font-size: 2.5rem; }
+    .units { font-size: 1.2rem; }
+    .dht-labels{
+      font-size: 1.5rem;
+      vertical-align:middle;
+      padding-bottom: 15px;
+    }
+    input[type=submit] {
+      border: 0;
+      line-height: 2.5;
+      padding: 0 5px;
+      font-size: 17px;
+      text-align: center;
+      
+      font-weight: bolder;
+      padding: 3px 3x;
+      text-decoration: none;
+      margin: 0px 0px;
+      cursor: pointer;
+      width: auto;
+      box-shadow: inset 2px 2px 3px rgba(255, 255, 255, .6),
+                  inset -2px -2px 3px rgba(0, 0, 0, .6);
+   }
+  </style>
+  <title>Temp/Humid monitor & Switch Device</title>
+</head>
+<body>
+  <h2>ESP8266 DHT Server</h2>
+  <p>
+    <i class="fas fa-thermometer-half" style="color:#059e8a;"></i> 
+    <span class="dht-labels">Temperature1</span>
+    <span id="t1">%T1%</span>
+    <sup class="units">&deg;F</sup>
+    <i class="fas fa-tint" style="color:#00add6;"></i>
+    <span class="dht-labels">Humidity1</span>
+    <span id="h1">%H1%</span>
+    <sup class="units">%</sup>
+  
+  </p>
+  <p>
+    <i class="fas fa-thermometer-half" style="color:#059e8a;"></i> 
+    <span class="dht-labels">Temperature2</span> 
+    <span id="t2">%T2%</span>
+    <sup class="units">&deg;F</sup>
+    <i class="fas fa-tint" style="color:#00add6;"></i>
+    <span class="dht-labels">Humidity2</span>
+    <span id="h2">%H2%</span>
+    <sup class="units">%</sup>
+  </p>
+  <table>
+    <tr>
+      <td style="width: 60px; font-weight: bolder;">Heat  1</td>
+      <td style="width: 70px; font-weight: bolder;">Humid 1</td>
+      <td style="width: 60px; font-weight: bolder;">Heat  2</td>
+      <td style="width: 70px; font-weight: bolder;">Humid 2</td>
+    </tr>
+    <tbody>
+      <tr>
+        <td id="heat1"><i class="fas fa-toggle-on" style="color: green;"></i>on</td>
+        <td id="humid1"><i class="fas fa-toggle-off" style="color:red;"></i>off</td>
+        <td id="heat2"><i class="fas fa-toggle-off" style="color:red;"></i>off</td>
+        <td id="humid2"><i class="fas fa-toggle-off" style="color:red;"></i>off</td>
+      </tr>
+     </tbody>
+  </table>
+  <br><br>
+  <input value="Set Limits" type="submit" onclick="f_redirect('Set_Bounds')" style="background:moccasin">
+  <p id="json"></p>
+</body>
+
+<script language = "javascript" type = "text/javascript">
+
+    let webSock       = new WebSocket('ws://'+window.location.hostname+':80');
+    webSock.onopen    = function(evt){f_webSockOnOpen(evt);}
+    webSock.onmessage = function(evt){f_webSockOnMessage(evt);}
+    webSock.onerror   = function(evt){f_webSockOnError(evt);}
+
+    function f_webSockOnMessage(evt){
+      if(typeof evt.data === "string"){
+        var t='<i class="fas fa-toggle-on" style="color: green;"></i> on';
+        var f='<i class="fas fa-toggle-off" style="color:red;"></i> off',
+        j=JSON.parse(evt.data);
+          for(var key in j[0])
+              if(j[0].hasOwnProperty(key)){
+                if(key=="heat1")document.getElementById(key).innerHTML=j[0][key]?t:f;else
+                if(key=="humid1")document.getElementById(key).innerHTML=j[0][key]?t:f;else
+                if(key=="heat2")document.getElementById(key).innerHTML=j[0][key]?t:f;else
+                if(key=="humid2")document.getElementById(key).innerHTML=j[0][key]?t:f;else
+                document.getElementById(key).innerHTML=j[0][key]==-999?"n/a":j[0][key];
+              }
+      }
+    }
+    function f_webSockOnOpen(evt){}
+    function f_webSockOnError(evt){}
+
+  function f_redirect(where){;
+                      window.location.href = "/"+where;
+  }
+
+</script>
+</html>
