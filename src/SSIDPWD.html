@@ -13,7 +13,7 @@
   <body style="text-align: left;">
     <hr>
       <table class="calibrate">
-        <caption>Set Temp & Humidty Relays SSID : PWD</caption>
+        <caption style="font-weight: bolder;">Set Temp & Humidty Relays SSID : PWD</caption>
           <thead>
               <tr>
                   <th>SSID</th>
@@ -22,12 +22,20 @@
           </thead>
           <tbody>
               <tr>
-                  <td><input type="text" id="SSID"></td>
-                  <td><input type="text" id="PWD"></td>
+                  <td><input type="text" id="SSID" name="cred"></td>
+                  <td><input type="text" id="PWD" name="cred"></td>
                   <td><input type="submit" id="submit" onclick="f_submit()"></td>
               </tr>
-          </tbody>
-      </table>
+          </tbody></table>
+
+
+      <br>
+      <label for="dhcp">DHCP:</label><input type="checkbox" id="isDHCP" onclick="f_dhcp(checked)">
+      <br><br>
+
+      <label for="ip"      name="dhcp">IP: </label>     <input type="tel"  id="ip"      name="dhcp" style="width: 7rem;">
+      <label for="gateway" name="dhcp">Gateway: </label><input type="text" id="gateway" name="dhcp" style="width: 7rem;">
+      <label for="mask"    name="dhcp">Mask: </label>   <input type="text" id="mask"    name="dhcp" style="width: 7rem;">
       <br><p id="status"></p>
     </body>
     <script language = "javascript" type = "text/javascript">
@@ -40,18 +48,27 @@
         function f_webSockOnMessage(evt){
           if(typeof evt.data === "string"){
               document.getElementById("status").innerHTML=evt.data;
+              const j=JSON.parse(evt.data);
+              const n=document.getElementsByName("dhcp");
+              for(var i=0;i<n.length;i++)
+                if(n[i].value="")n[i].value=j[n[i].id];
           }
         }
         function f_webSockOnOpen(evt){}
         function f_webSockOnError(evt){}
         function f_submit(){
-          var str= '{"SSID":"0","PWD":"0"}';
+          var str= '{"SSID":"0","PWD":"0", "ip":"0","gateway":"0","mask":"0","isDHCP":"0"}';
           j=JSON.parse(str);
-            for(var key in j)j[key]=document.getElementById(key).value;
-            console.log(JSON.stringify(j));
-
+            for(var key in j){
+              if(key=="isDHCP")j[key]=document.getElementById(key).checked;
+              else j[key]=document.getElementById(key).value;
+            }
           webSock.send(JSON.stringify(j));
         }
-    </script>
+        function f_dhcp(checked){
+          const n=document.getElementsByName("dhcp");
+          if(checked)for(var i=0;i<n.length;i++)n[i].setAttribute("hidden", "hidden");
+          else for(var i=0;i<n.length;i++)n[i].removeAttribute("hidden");
+        }
+     </script>
   </html>
-  

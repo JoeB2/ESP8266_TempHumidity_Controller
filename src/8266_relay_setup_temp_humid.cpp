@@ -12,6 +12,8 @@
 **        10.0.1.13 web page provides opportuntiy to set SSID/PWD; 10.0.1.13/update affords OTA opportunity
 **
 */
+//#define debug
+//#define dbg
 #include  <Arduino.h>
 #include <AsyncElegantOTA.h>
 #include <ESP8266WiFi.h>
@@ -21,7 +23,7 @@
 #include <DNSServer.h>
 #include <ESP8266mDNS.h>
 #include <Adafruit_Sensor.h>
-#include "DHT.h"              // dropped .h & .cpp in ino folder
+#include "DHT.h"
 #include <index.h>
 #include <string.h>
 
@@ -111,13 +113,17 @@ void initSSIDPWD(const std::string &s);
 
 
 void setup(){
+#ifdef debug
   Serial.begin(115200);
+#endif
 
   pinMode(12, OUTPUT); // relay : +5v power for the DHT sensors
 
+#ifndef debug
   pinMode(HUMID1_pin, OUTPUT);  pinMode(HUMID1_pin, OUTPUT);  //Humid1 relay
   pinMode(HEATER2_pin, OUTPUT); pinMode(HEATER2_pin, OUTPUT); //Heat2 relay
   pinMode(HEATER1_pin, OUTPUT); pinMode(HEATER1_pin, OUTPUT); //Heat1 relay
+#endif
 
   SPIFFS.begin();
   initLocalStruct(); // update s_Msg using SPIFFS's JSON if available
@@ -139,7 +145,9 @@ void setup(){
     pwdMode=true;
   }else{
     pwdMode=false;
+#ifndef dbg
     dht1.begin(); dht2.begin();
+#endif
     webSock.onEvent(onWsEvent);
     server.addHandler(&webSock);
 
@@ -152,7 +160,7 @@ void setup(){
     server.begin();
   }
 }
- 
+
 void loop(){
     while(pwdMode){
         webSock.textAll(creds.toStr().c_str()); delay(5000);
@@ -162,6 +170,7 @@ void loop(){
     if(millis()-lastDHT > sv.delay){ // check DHT reading every sv.delay ms
         // note: DHTs are powered down between readings" attempt to minimize electrollysis
         // here we power-up the DHTs for a reading.
+#ifndef dbg
         pinMode(1, INPUT_PULLUP);  //GPIO 1 : TX : set use for DHT1 
         pinMode(3, INPUT_PULLUP);  //GPIO 3 : RX : set use for DHT2
 
@@ -179,7 +188,7 @@ void loop(){
         digitalWrite(12, LOW); // turn DHT power relay off - DHT +5v
         pinMode(1, OUTPUT);digitalWrite(1, LOW); //ground DHT signal wire
         pinMode(3, OUTPUT);digitalWrite(3, LOW); //ground DHT signal wire
-
+#endif
         setRelays();
 
         lastDHT = millis();
@@ -229,6 +238,9 @@ void loop(){
                 f.close();
                 update_sMsgFromString(s, sv);
         }
+#ifdef dbg
+Serial.printf("initLocalStruct : sv:%s", sv.toStr().c_str());
+#endif       
   }
   // save the local systemValues_t data as JSON string to SPIFFS
   bool saveStruct(){
@@ -257,6 +269,9 @@ void loop(){
                 f.close();
                 initSSIDPWD(s);
         }
+#ifdef dbg
+Serial.printf("initSSIDPWD : sv:%s", creds.toStr().c_str());
+#endif       
   }
   void initSSIDPWD(const std::string &s){
                  creds.SSID=valFromJson(s, "SSID");
@@ -319,5 +334,8 @@ void loop(){
               Serial.print(".");
               if(millis() - startup >= 5000) break;
         }
+#ifdef dbg
+Serial.printf("wifiConnect : IP:%s, GW: %s, Mask: %s\n", WiFi.localIP().toString().c_str(), WiFi.gatewayIP().toString().c_str(), WiFi.subnetMask().toString().c_str());
+#endif
         return(WiFi.status() == WL_CONNECTED);
 }
