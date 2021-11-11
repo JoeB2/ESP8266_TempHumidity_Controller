@@ -12,7 +12,6 @@
 **        10.0.1.13 web page provides opportuntiy to set SSID/PWD; 10.0.1.13/update affords OTA opportunity
 **
 */
-//#define debug
 //#define dbg
 #include <Arduino.h>
 #include <AsyncElegantOTA.h>
@@ -32,7 +31,6 @@
 #define HEATER2_pin 14
 #define HUMID1_pin  13
 
-
   const byte DNS_PORT  = 53;
   const char *AP_NAME = "T/H Relays-AP: 10.0.1.13";
   const unsigned int wsDelay=7000;  // WebSock send delay and last send times
@@ -41,11 +39,8 @@
   unsigned int lastDHT=millis()-(30*60*1000); // measurments loop millis: fire dht readings on the first loop
   unsigned int lastWS=millis();
 
-IPAddress  // soft AP IP info
+  IPAddress  // soft AP IP info
           ip_AP(10,0,1,13)
-        , ip_STA(10,0,0,113)
-        , ip_AP_STA(10,0,1,13)
-        , ip_GW(10,0,0,125)
         , ip_AP_GW(10,0,1,13)
         , ip_subNet(255,255,255,128);
 
@@ -112,8 +107,7 @@ bool initCreds();
 void setCreds(const std::string& s);
 bool saveCreds();
 
-
-void setup(){
+  void setup(){
 #ifdef debug
   Serial.begin(115200);
 #endif
@@ -155,7 +149,6 @@ void setup(){
     server.begin();
   }
 }
-
   void loop(){
     if(AP_MODE)return;
 
@@ -232,7 +225,6 @@ void setup(){
 Serial.printf("initLocalStruct : sv:%s", sv.toStr().c_str());
 #endif       
   }
-  // save the local systemValues_t data as JSON string to SPIFFS
   bool saveStruct(){
         File f = SPIFFS.open(F("/systemValues_t.json"), "w");
         if(f){
@@ -242,7 +234,6 @@ Serial.printf("initLocalStruct : sv:%s", sv.toStr().c_str());
         }
         else{return false;}
   }
-  // save the local systemValues_t data as JSON string to SPIFFS
   bool saveCreds(){
     File f = SPIFFS.open(F("/creds.json"), "w");
     if(f){
@@ -281,7 +272,6 @@ Serial.printf("initLocalStruct : sv:%s", sv.toStr().c_str());
     creds.GW.fromString(valFromJson(s, "GW").c_str());
     creds.MASK.fromString(valFromJson(s, "MASK").c_str());
   }
-  // process inbound websock json
   void update_sMsgFromString(const std::string &json, systemValues_t &p){
     p.t1_on =::atof(valFromJson(json, "t1_on").c_str());
     p.t1_off=::atof(valFromJson(json, "t1_off").c_str());
@@ -291,11 +281,10 @@ Serial.printf("initLocalStruct : sv:%s", sv.toStr().c_str());
     p.t2_off=::atof(valFromJson(json, "t2_off").c_str());
     p.delay =::atoi(valFromJson(json, "delay").c_str());
   }
-  // NOTE: Stack Dumps when trying to use <ArduinoJson.h>
-  std::string valFromJson(const std::string &json, const std::string &element){
+  std::string valFromJson(const std::string &json, const std::string &element){// got stack dumpos with ArduinoJson
     size_t start, end;
   //         var str= '[{"t1":0,"h1":0,"t2":0},{"t1_on":75,"t1_off":82,"h1_on":75,"h1_off":85,"t2_on":75,"t2_off":80,"delay":7}]';
-  //         std""string str= '[{"t1":0,"h1":0,"t2":0},{"t1_on":75,"t1_off":82,"h1_on":75,"h1_off":85,"t2_on":75,"t2_off":80,"delay":7}]';
+  //         std::string str= '[{"t1":0,"h1":0,"t2":0},{"t1_on":75,"t1_off":82,"h1_on":75,"h1_off":85,"t2_on":75,"t2_off":80,"delay":7}]';
     start = json.find(element);
     start = json.find(":", start)+1;
     if(json.substr(start,1) =="\"")start++;
@@ -305,16 +294,13 @@ Serial.printf("initLocalStruct : sv:%s", sv.toStr().c_str());
   bool wifiConnect(WiFiMode m){
     WiFi.disconnect();
     WiFi.softAPdisconnect();
-
     WiFi.mode(m);// WIFI_AP_STA,WIFI_AP; WIFI_STA;
     
     switch(m){
-            case WIFI_OFF: return(true);
-
             case WIFI_STA:
                             WiFi.begin(creds.SSID.c_str(), creds.PWD.c_str());
                             WiFi.channel(2);
-                            WiFi.config(ip_STA, ip_GW, ip_subNet);
+                            WiFi.config(creds.IP, creds.GW, creds.MASK);
                             break;
 
             case WIFI_AP:
@@ -323,23 +309,18 @@ Serial.printf("initLocalStruct : sv:%s", sv.toStr().c_str());
                             WiFi.begin();
                             break;
 
-            case WIFI_AP_STA:
-                            WiFi.channel(2);
-                            WiFi.config(ip_AP_STA, ip_AP_GW, ip_subNet);
-                            WiFi.enableAP(true);
-                            WiFi.softAPConfig(ip_AP, ip_AP_GW, ip_subNet);
-                            WiFi.softAP(AP_NAME, "", 3, 0, 4); // default to channel 3,, not hidden, max 4 connctions
-                            break;
+            case WIFI_AP_STA: break;
+            case WIFI_OFF:    break;
     }
-
     unsigned int startup = millis();
     while(WiFi.status() != WL_CONNECTED){
           delay(250);
           Serial.print(".");
           if(millis() - startup >= 5000) break;
     }
+    Serial.println("");
 #ifdef dbg
-Serial.printf("wifiConnect : IP:%s, GW: %s, Mask: %s\n", WiFi.localIP().toString().c_str(), WiFi.gatewayIP().toString().c_str(), WiFi.subnetMask().toString().c_str());
+  Serial.printf("wifiConnect : IP:%s, GW: %s, Mask: %s\n", WiFi.localIP().toString().c_str(), WiFi.gatewayIP().toString().c_str(), WiFi.subnetMask().toString().c_str());
 #endif
     return(WiFi.status() == WL_CONNECTED);
   }
