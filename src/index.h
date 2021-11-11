@@ -114,7 +114,7 @@
 </html>
 )=====";
 
-  const char SET_BOUNDS[] PROGMEM =  R"=====(
+  const char SET_BOUNDS_HTML[] PROGMEM =  R"=====(
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -224,7 +224,7 @@
 </html>
 )=====";
 
-  const char SSIDPWD[] PROGMEM =  R"=====(
+  const char SSIDPWD_HTML[] PROGMEM =  R"=====(
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -260,9 +260,9 @@
       <label for="dhcp">DHCP:</label><input type="checkbox" id="isDHCP" onclick="f_dhcp(checked)">
       <br><br>
 
-      <label for="ip"      name="dhcp">IP: </label>     <input type="tel"  id="ip"      name="dhcp" style="width: 7rem;">
-      <label for="gateway" name="dhcp">Gateway: </label><input type="text" id="gateway" name="dhcp" style="width: 7rem;">
-      <label for="mask"    name="dhcp">Mask: </label>   <input type="text" id="mask"    name="dhcp" style="width: 7rem;">
+      <label for="ip"      name="dhcp">IP: </label>     <input type="text"  id="IP"      name="dhcp" style="width: 7rem;">
+      <label for="gateway" name="dhcp">Gateway: </label><input type="text" id="GW" name="dhcp" style="width: 7rem;">
+      <label for="mask"    name="dhcp">Mask: </label>   <input type="text" id="MASK"    name="dhcp" style="width: 7rem;">
       <br><p id="status"></p>
     </body>
     <script language = "javascript" type = "text/javascript">
@@ -271,6 +271,7 @@
         webSock.onopen    = function(evt){f_webSockOnOpen(evt);}
         webSock.onmessage = function(evt){f_webSockOnMessage(evt);}
         webSock.onerror   = function(evt){f_webSockOnError(evt);}
+        var str= '{"SSID":"0","PWD":"0", "IP":"0","GW":"0","MASK":"0","isDHCP":false}';
   
         function f_webSockOnMessage(evt){
           if(typeof evt.data === "string"){
@@ -284,12 +285,12 @@
         function f_webSockOnOpen(evt){}
         function f_webSockOnError(evt){}
         function f_submit(){
-          var str= '{"SSID":"0","PWD":"0", "ip":"0","gateway":"0","mask":"0","isDHCP":"0"}';
           j=JSON.parse(str);
-            for(var key in j){
-              if(key=="isDHCP")j[key]=document.getElementById(key).checked;
-              else j[key]=document.getElementById(key).value;
-            }
+          for(var key in j){
+            if(key=="isDHCP")j[key]=document.getElementById(key).checked;
+            else j[key]=document.getElementById(key).value;
+          }
+          console.log(j);
           webSock.send(JSON.stringify(j));
         }
         function f_dhcp(checked){
