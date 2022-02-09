@@ -4,40 +4,44 @@
 **  two DHT11 sensors dht1 & dht2
 **  Relays 1, 2, 3 (heater1, heater2, humidifier1)
 **  Web page: 10.0.0.113 shows current temps/humidity and state of relays
-**  Web page 10.0.0.113/Set_Bounds affords opportunity to set tems/humidity to turn on/off relays
+**  Web page 10.0.0.113/Set_Bounds affords opportunity to set temps/humidity to turn on/off relays
 **  Web page 10.0.0.113/Set_Bounds last textbox allows setting frequency for temp/humid sensor checks
 **  NOTE: power to sensors is turned off between checks in order to minimize electrolysis of DHT11
 **  NOTE: OTA uppdates are implemented: 10.0.0.113/update
 **  note: iF EPS8266 Can't log into WiFi stored in SPIFFS/SSIDPWD AP: 10.0.1.13 is implemented
-**        10.0.1.13 web page provides opportuntiy to set SSID/PWD; 10.0.1.13/update affords OTA opportunity
+**        10.0.1.13 web page provides opportunity to set SSID/PWD; 10.0.1.13/update affords OTA opportunity
 **
 */
 //#define dbg
 #include <Arduino.h>
 #include <AsyncElegantOTA.h>
 #include <ESP8266WiFi.h>
-#include <ESP8266WiFiType.h>
-#include <queue.h>
 #include <ESPAsyncWebServer.h>
-#include <DNSServer.h>
-#include <ESP8266mDNS.h>
+#include <LittleFS.h>
 #include <Adafruit_Sensor.h>
 #include "DHT.h"
 #include <index.h>
 #include <string.h>
 
 #define DHTTYPE DHT11
+#define DHT1_PIN 1 // tx
+#define DHT2_PIN 3 //rx
+#define DHT_POWER_PIN 12
 #define HEATER1_pin 16
 #define HEATER2_pin 14
 #define HUMID1_pin  13
 
-  const byte DNS_PORT  = 53;
+#if defined(dbg)
+  const bool debug = true;
+#else
+  const bool debug = false;
+#endif
+
   const char *AP_NAME = "T/H Relays-AP: 10.0.1.13";
   const unsigned int wsDelay=7000;  // WebSock send delay and last send times
 
   bool AP_MODE=false;
-  unsigned int lastDHT=millis()-(30*60*1000); // measurments loop millis: fire dht readings on the first loop
-  unsigned int lastWS=millis();
+  unsigned int lastDHT=0; // measurements loop millis: fire dht readings on the first loop
 
   IPAddress  // soft AP IP info
           ip_AP(10,0,1,13)
@@ -47,10 +51,10 @@
 // objects
 AsyncWebServer server(80);
 AsyncWebSocket webSock("/");
-DNSServer dnsServer;
+//DNSServer dnsServer;
 
-DHT dht1(1, DHTTYPE);
-DHT dht2(3, DHTTYPE);
+DHT dht1(DHT1_PIN, DHTTYPE);
+DHT dht2(DHT2_PIN, DHTTYPE);
 
 typedef struct WifiCreds_t{
       String    SSID;
@@ -68,7 +72,7 @@ typedef struct WifiCreds_t{
 } WifiCreds_t;
 WifiCreds_t creds;
 
-typedef struct systemValues_t{   // Scale Information
+typedef struct systemValues_t{   // temp/humid & threshold values
         float t1;
         int   h1;
         float t2;
@@ -83,7 +87,7 @@ typedef struct systemValues_t{   // Scale Information
         int h1_off;
         int t2_on;
         int t2_off;
-        unsigned int delay;
+        unsigned int delay = 7000;
 
         std::string toStr(){    // make JSON string
             char c[168];
@@ -96,6 +100,7 @@ systemValues_t sv;
 
 /******  PROTOTYPES  *******/
 void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len);
+void onWsEvent_Creds(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len);
 void notFound(AsyncWebServerRequest *request);
 void initLocalStruct();
 bool wifiConnect(WiFiMode m);
@@ -107,31 +112,45 @@ bool initCreds();
 void setCreds(const std::string& s);
 bool saveCreds();
 
-  void setup(){
-#ifdef debug
+void setup(){
+#ifdef dbg
   Serial.begin(115200);
+  Serial.printf("%i :  SETUP\n", __LINE__);
 #endif
 
-  SPIFFS.begin();
-  AP_MODE = !initCreds() || !wifiConnect(WIFI_STA);
+  LittleFS.begin();
+  AP_MODE = !initCreds();
+  AP_MODE |= !wifiConnect(WIFI_STA);
 
   // Connect to Wi-Fi
-  if(AP_MODE){ // can't connect WiFi : go into "get ssid:pwd mode"
+  if(AP_MODE){ // didn't connect WiFi : go into "get ssid:pwd mode"
+#ifdef dbg
+  Serial.printf("%i : AP_MODE\n", __LINE__);
+#endif
+
     wifiConnect(WIFI_AP);
-
-    webSock.onEvent(onWsEvent);
+//    webSock.onEvent(onWsEvent_Creds);
     server.addHandler(&webSock);
+#ifdef dbg
+  Serial.printf("%i AP Mode: creds: %s\n", __LINE__, creds.toStr().c_str());Serial.flush();
+#endif
 
-    // Route for root / web page
-    dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
-    dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
     server.on("/"      , HTTP_GET, [](AsyncWebServerRequest *request){request->send_P(200, "text/html", SSIDPWD_HTML);});
     AsyncElegantOTA.begin(&server);
     server.begin();
-    yield(); // make sure WDT is happy
-  }else{
-    initLocalStruct(); // update s_Msg using SPIFFS's JSON if available
-    pinMode(12, OUTPUT); // relay : +5v power for the DHT sensors
+    ESP.wdtFeed();
+
+  }else{ // Creds obtained from LittleFS and connected to WiFi
+
+#ifdef dbg
+  Serial.printf("%i : Normal MODE\n", __LINE__);Serial.flush();
+#endif
+
+    initLocalStruct();    // update sv using LittleFs's JSON if available
+#ifdef dbg
+  Serial.printf("%i : %s : Normal Mode: sv: %s\n", __LINE__, __PRETTY_FUNCTION__, sv.toStr().c_str());Serial.flush();
+#endif
+    pinMode(DHT_POWER_PIN, OUTPUT);  // relay : +5v power for the DHT sensors
     pinMode(HUMID1_pin, OUTPUT);
     pinMode(HEATER2_pin, OUTPUT);
     pinMode(HEATER1_pin, OUTPUT);
@@ -146,48 +165,66 @@ bool saveCreds();
 
     // Start server
     AsyncElegantOTA.begin(&server);
+    ESP.wdtFeed();
     server.begin();
   }
+#ifdef dbg
+  Serial.printf("\n%i : AP_MODE: %s\n", __LINE__, AP_MODE?"T":"F");Serial.flush();
+#endif
+
 }
-  void loop(){
+void loop(){
+#ifdef dbg
+  Serial.printf(".");Serial.flush();
+#endif
+
+    delay(100);
     if(AP_MODE)return;
-
-    if(millis()-lastDHT > sv.delay){ // check DHT reading every sv.delay ms
-        // note: DHTs are powered down between readings" attempt to minimize electrollysis
+    if(lastDHT == 0 || millis()-lastDHT > sv.delay){ // check DHT reading every sv.delay ms
+        // note: DHTs are powered down between readings" attempt to minimize electrolysis
         // here we power-up the DHTs for a reading.
+#ifdef dbg
+  Serial.printf("\n%i : lastDHT : %ui\n", __LINE__);Serial.flush();
+#endif
+        pinMode(DHT1_PIN, INPUT_PULLUP);  //GPIO 1 : TX : set use for DHT1 
+        pinMode(DHT2_PIN, INPUT_PULLUP);  //GPIO 3 : RX : set use for DHT2
 
-        pinMode(1, INPUT_PULLUP);  //GPIO 1 : TX : set use for DHT1 
-        pinMode(3, INPUT_PULLUP);  //GPIO 3 : RX : set use for DHT2
-
-        digitalWrite(12, HIGH);
-        while(!dht1.read()&&!dht2.read())delay(300);
-        delay(100);
+        digitalWrite(DHT_POWER_PIN, HIGH); // power up the DHTs
+        while(!dht1.read()&&!dht2.read()&&!debug){
+          ESP.wdtFeed();
+          delay(300);
+        }
 
         // get temps and humidity
         sv.t1 = dht1.readTemperature(true);
         sv.h1 = dht1.readHumidity();
         sv.t2 = dht2.readTemperature(true);
         sv.h2 = dht2.readHumidity();
-
+#ifdef dbg
+  Serial.printf("\n%i : Loop: sv: %s\n", __LINE__, sv.toStr().c_str());Serial.flush();
+#endif
         // powerdown DHT sensors
-        digitalWrite(12, LOW); // turn DHT power relay off - DHT +5v
-        pinMode(1, OUTPUT);digitalWrite(1, LOW); //ground DHT signal wire
-        pinMode(3, OUTPUT);digitalWrite(3, LOW); //ground DHT signal wire
-        setRelays();
+        digitalWrite(DHT_POWER_PIN, LOW); // turn of DHTs +5
+        pinMode(DHT1_PIN, OUTPUT);digitalWrite(DHT1_PIN, LOW); //ground DHT signal wire
+        pinMode(DHT2_PIN, OUTPUT);digitalWrite(DHT2_PIN, LOW); //ground DHT signal wire
 
-        lastDHT = millis();
-    }
-    if(millis()-lastWS > wsDelay){// send websock every wsDelay ms
+        setRelays();
         webSock.textAll(sv.toStr().c_str()); delay(1);
         webSock.cleanupClients();
-        lastWS=millis();
+
+        lastDHT = millis();
     }
   }
   void setRelays(){
     // current state and between on/off temps or above/below absolute on/off boundary
-    if(sv.t1<sv.t1_on)sv.heat1=true;if(sv.t1>sv.t1_off)sv.heat1=false;
-    if(sv.t2<sv.t2_on)sv.heat2=true;if(sv.t2>sv.t2_off)sv.heat2=false;
-    if(sv.h1<sv.h1_on)sv.humid1=true;if(sv.h1>sv.h1_off)sv.humid1=false;
+    if(sv.t1<sv.t1_on)sv.heat1=true;
+      if(sv.t1>sv.t1_off)sv.heat1=false;
+
+    if(sv.t2<sv.t2_on)sv.heat2=true;
+      if(sv.t2>sv.t2_off)sv.heat2=false;
+
+    if(sv.h1<sv.h1_on)sv.humid1=true;
+      if(sv.h1>sv.h1_off)sv.humid1=false;
   
     digitalWrite(HEATER1_pin, sv.heat1);
     digitalWrite(HUMID1_pin , sv.humid1);
@@ -201,32 +238,53 @@ bool saveCreds();
         if(info->opcode == WS_TEXT){
           data[len]=0;
           std::string const s=(char *)data;
-          if(AP_MODE){
-            setCreds(s);
-            AP_MODE=saveCreds();
-            ESP.restart();
-          }else{
-                update_sMsgFromString(s, sv);
-                saveStruct();
+#ifdef dbg
+  Serial.printf("\n%i : WS: data: %s, %i\n", __LINE__, s.c_str(), s.length());Serial.flush();
+#endif
+
+          if(s != "Connect"){
+            update_sMsgFromString(s, sv);
+            saveStruct();
           }
+          client->text(sv.toStr().c_str());
         }
       }
     }
   }
-  // load SPIFFS copy of JSON into the local scale's systemValues_t
+  void onWsEvent_Creds(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len){
+    if(type == WS_EVT_DATA){
+      AwsFrameInfo * info = (AwsFrameInfo*)arg;
+      if(info->final && !info->index && info->len == len){
+        if(info->opcode == WS_TEXT){
+          data[len]=0;
+          std::string const s=(char *)data;
+#ifdef dbg
+  Serial.printf("\n%i : WS_Creds: data: %s, %i\n", __LINE__, s.c_str(), s.length());Serial.flush();
+#endif
+          if(s!="Connect"){
+            setCreds(s);
+            AP_MODE=saveCreds();
+            ESP.restart();
+          }
+          client->text(creds.toStr().c_str());
+        }
+      }
+    }
+  }
+  // load LittleFS copy of JSON into the local scale's systemValues_t
   void initLocalStruct(){
-        File f = SPIFFS.open("/systemValues_t.json", "r");
+        File f = LittleFS.open("/systemValues_t.json", "r");
         if(f){
                 const std::string s = f.readString().c_str();
                 f.close();
                 update_sMsgFromString(s, sv);
         }
 #ifdef dbg
-Serial.printf("initLocalStruct : sv:%s", sv.toStr().c_str());
+  Serial.printf("%i : initLocalStruct : sv:%s\n", __LINE__, sv.toStr().c_str());Serial.flush();
 #endif       
   }
   bool saveStruct(){
-        File f = SPIFFS.open(F("/systemValues_t.json"), "w");
+        File f = LittleFS.open(F("/systemValues_t.json"), "w");
         if(f){
                 f.print(sv.toStr().c_str());
                 f.close();
@@ -235,34 +293,34 @@ Serial.printf("initLocalStruct : sv:%s", sv.toStr().c_str());
         else{return false;}
   }
   bool saveCreds(){
-    File f = SPIFFS.open(F("/creds.json"), "w");
+    File f = LittleFS.open(F("/creds.json"), "w");
     if(f){
           f.print(creds.toStr().c_str());
           f.close();
   #ifdef dbg
-    Serial.printf("saveCreds Success: creds: %s\n", creds.toStr().c_str());Serial.flush();
+    Serial.printf("%i : saveCreds Success: creds: %s\n", __LINE__, creds.toStr().c_str());Serial.flush();
   #endif
           return true;
     }
     else{
   #ifdef dbg
-    Serial.printf("saveCreds FAILED: creds: %s\n", creds.toStr().c_str());Serial.flush();
+    Serial.printf("%i : saveCreds FAILED: creds: %s\n", __LINE__, creds.toStr().c_str());Serial.flush();
   #endif
         return(false);
     }
   }
   bool initCreds(){
-          File f = SPIFFS.open(F("/creds.json"), "r");
+          File f = LittleFS.open(F("/creds.json"), "r");
           if(f){
                   std::string s = f.readString().c_str();
                   f.close();
                   setCreds(s);
+                  return(true);
           }
-          else return(false);
   #ifdef dbg
-        Serial.printf("\nFailed init creds from SPIFFS: %s\n", creds.toStr().c_str());Serial.flush();
+    Serial.printf("\n%i : Failed init creds from SPIFFS: %s\n", __LINE__, creds.toStr().c_str());Serial.flush();
   #endif
-    return(true);
+    return(false);
   }
   void setCreds(const std::string& s){
     creds.SSID=valFromJson(s, "SSID").c_str();
@@ -273,6 +331,9 @@ Serial.printf("initLocalStruct : sv:%s", sv.toStr().c_str());
     creds.MASK.fromString(valFromJson(s, "MASK").c_str());
   }
   void update_sMsgFromString(const std::string &json, systemValues_t &p){
+#ifdef dbg
+  Serial.printf("%i : update_sv\n", __LINE__);Serial.flush();
+#endif
     p.t1_on =::atof(valFromJson(json, "t1_on").c_str());
     p.t1_off=::atof(valFromJson(json, "t1_off").c_str());
     p.h1_on =::atoi(valFromJson(json, "h1_on").c_str());
@@ -281,7 +342,7 @@ Serial.printf("initLocalStruct : sv:%s", sv.toStr().c_str());
     p.t2_off=::atof(valFromJson(json, "t2_off").c_str());
     p.delay =::atoi(valFromJson(json, "delay").c_str());
   }
-  std::string valFromJson(const std::string &json, const std::string &element){// got stack dumpos with ArduinoJson
+  std::string valFromJson(const std::string &json, const std::string &element){// got stack dumps with ArduinoJson
     size_t start, end;
   //         var str= '[{"t1":0,"h1":0,"t2":0},{"t1_on":75,"t1_off":82,"h1_on":75,"h1_off":85,"t2_on":75,"t2_off":80,"delay":7}]';
   //         std::string str= '[{"t1":0,"h1":0,"t2":0},{"t1_on":75,"t1_off":82,"h1_on":75,"h1_off":85,"t2_on":75,"t2_off":80,"delay":7}]';
@@ -300,7 +361,8 @@ Serial.printf("initLocalStruct : sv:%s", sv.toStr().c_str());
             case WIFI_STA:
                             WiFi.begin(creds.SSID.c_str(), creds.PWD.c_str());
                             WiFi.channel(2);
-                            WiFi.config(creds.IP, creds.GW, creds.MASK);
+                            if(!creds.isDHCP)
+                              WiFi.config(creds.IP, creds.GW, creds.MASK);
                             break;
 
             case WIFI_AP:
@@ -320,7 +382,7 @@ Serial.printf("initLocalStruct : sv:%s", sv.toStr().c_str());
     }
     Serial.println("");
 #ifdef dbg
-  Serial.printf("wifiConnect : IP:%s, GW: %s, Mask: %s\n", WiFi.localIP().toString().c_str(), WiFi.gatewayIP().toString().c_str(), WiFi.subnetMask().toString().c_str());
+  Serial.printf("%i : wifiConnect : IP:%s, GW: %s, Mask: %s\n", __LINE__, WiFi.localIP().toString().c_str(), WiFi.gatewayIP().toString().c_str(), WiFi.subnetMask().toString().c_str());Serial.flush();
 #endif
     return(WiFi.status() == WL_CONNECTED);
   }

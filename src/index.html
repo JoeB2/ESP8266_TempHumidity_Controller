@@ -36,7 +36,7 @@
   </style>
   <title>Temp/Humid monitor & Switch Device</title>
 </head>
-<body>
+  <input id="help" type="submit" value="Help" style="font-size: 14px;line-height: 1.5;" onclick="f_help()">
   <h2>ESP8266 DHT Server</h2>
   <p>
     <i class="fas fa-thermometer-half" style="color:#059e8a;"></i> 
@@ -47,7 +47,6 @@
     <span class="dht-labels">Humidity1</span>
     <span id="h1">%H1%</span>
     <sup class="units">%</sup>
-  
   </p>
   <p>
     <i class="fas fa-thermometer-half" style="color:#059e8a;"></i> 
@@ -77,37 +76,44 @@
   </table>
   <br><br>
   <input value="Set Limits" type="submit" onclick="f_redirect('Set_Bounds')" style="background:moccasin">
-  <p id="json"></p>
+  <p id="message1" style="color:gray;font-size:13px;font-weight:bold" hidden>TEST</p>
 </body>
 
-<script language = "javascript" type = "text/javascript">
+  <script language = "javascript" type = "text/javascript">
 
     let webSock       = new WebSocket('ws://'+window.location.hostname+':80');
-    webSock.onopen    = function(evt){f_webSockOnOpen(evt);}
+    webSock.onopen    = function(evt){webSock.send("Connect");}
     webSock.onmessage = function(evt){f_webSockOnMessage(evt);}
     webSock.onerror   = function(evt){f_webSockOnError(evt);}
 
     function f_webSockOnMessage(evt){
       if(typeof evt.data === "string"){
-        var t='<i class="fas fa-toggle-on" style="color: green;"></i> on';
-        var f='<i class="fas fa-toggle-off" style="color:red;"></i> off',
+        document.getElementById("message1").innerHTML = evt.data;
+        var t='<i class="fas fa-toggle-on" style="color: green;"></i>on';
+        var f='<i class="fas fa-toggle-off" style="color:red;"></i>off';
+        console.log(evt.data);
         j=JSON.parse(evt.data);
           for(var key in j[0])
               if(j[0].hasOwnProperty(key)){
+                console.log(key);
                 if(key=="heat1")document.getElementById(key).innerHTML=j[0][key]?t:f;else
                 if(key=="humid1")document.getElementById(key).innerHTML=j[0][key]?t:f;else
                 if(key=="heat2")document.getElementById(key).innerHTML=j[0][key]?t:f;else
                 if(key=="humid2")document.getElementById(key).innerHTML=j[0][key]?t:f;else
                 document.getElementById(key).innerHTML=j[0][key]==-999?"n/a":j[0][key];
               }
+        document.getElementById("message1").innerHTML=evt.data;
       }
     }
-    function f_webSockOnOpen(evt){}
     function f_webSockOnError(evt){}
-
-  function f_redirect(where){;
+    function f_help(){
+      j = document.getElementById("json");
+      let v = document.getElementById("help");
+      document.getElementById("message1").hidden = v.value=="Help"?false:true;
+      v.value=v.value=="Help"?"Un-Help":"Help";
+    }
+    function f_redirect(where){;
                       window.location.href = "/"+where;
-  }
-
-</script>
+    }
+  </script>
 </html>

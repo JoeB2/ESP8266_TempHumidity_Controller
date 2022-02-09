@@ -22,8 +22,8 @@
           </thead>
           <tbody>
               <tr>
-                  <td><input type="text" id="SSID" name="cred"></td>
-                  <td><input type="text" id="PWD" name="cred"></td>
+                  <td><input type="text" id="SSID" name="cred" onchange="f_update()"></td>
+                  <td><input type="text" id="PWD" name="cred" onchange="f_update()"></td>
                   <td><input type="submit" id="submit" onclick="f_submit()"></td>
               </tr>
           </tbody></table>
@@ -33,20 +33,22 @@
       <label for="dhcp">DHCP:</label><input type="checkbox" id="isDHCP" onclick="f_dhcp(checked)">
       <br><br>
 
-      <label for="ip"      name="dhcp">IP: </label>     <input type="text"  id="IP"      name="dhcp" style="width: 7rem;">
-      <label for="gateway" name="dhcp">Gateway: </label><input type="text" id="GW" name="dhcp" style="width: 7rem;">
-      <label for="mask"    name="dhcp">Mask: </label>   <input type="text" id="MASK"    name="dhcp" style="width: 7rem;">
+      <label for="ip"      name="dhcp">IP: </label>     <input type="text"  id="IP"  name="dhcp" style="width: 7rem;" onchange="f_update()">
+      <label for="gateway" name="dhcp">Gateway: </label><input type="text" id="GW"   name="dhcp" style="width: 7rem;" onchange="f_update()">
+      <label for="mask"    name="dhcp">Mask: </label>   <input type="text" id="MASK" name="dhcp" style="width: 7rem;" onchange="f_update()">
       <br><p id="status"></p>
     </body>
     <script language = "javascript" type = "text/javascript">
   
         let webSock       = new WebSocket('ws://'+window.location.hostname+':80');
-        webSock.onopen    = function(evt){f_webSockOnOpen(evt);}
+        webSock.onopen    = function(evt){webSock.send("Connect");}
         webSock.onmessage = function(evt){f_webSockOnMessage(evt);}
         webSock.onerror   = function(evt){f_webSockOnError(evt);}
         var str= '{"SSID":"0","PWD":"0", "IP":"0","GW":"0","MASK":"0","isDHCP":false}';
-  
+        let updates = false;
+
         function f_webSockOnMessage(evt){
+          if(updates)return;
           if(typeof evt.data === "string"){
               document.getElementById("status").innerHTML=evt.data;
               const j=JSON.parse(evt.data);
@@ -55,7 +57,6 @@
                 if(n[i].value="")n[i].value=j[n[i].id];
           }
         }
-        function f_webSockOnOpen(evt){}
         function f_webSockOnError(evt){}
         function f_submit(){
           j=JSON.parse(str);
@@ -65,11 +66,16 @@
           }
           console.log(j);
           webSock.send(JSON.stringify(j));
+          updates = false;
         }
         function f_dhcp(checked){
           const n=document.getElementsByName("dhcp");
           if(checked)for(var i=0;i<n.length;i++)n[i].setAttribute("hidden", "hidden");
           else for(var i=0;i<n.length;i++)n[i].removeAttribute("hidden");
+          updates=true;
+        }
+        function f_update(){
+          updates = true;
         }
      </script>
   </html>

@@ -33,9 +33,9 @@
       }
 </style>
 <body style="text-align: left;">
-  <hr><b><i>Current setttings are sent from the MCU every 7 seconds.</i>
+    <input id="help" type="button" value="Help" onclick="f_help()"/><br><br>
     <table class="calibrate">
-      <caption>Set Temp & Humidty Bounds</caption>
+      <caption>Set Temp & Humidity Bounds</caption>
         <thead>
             <tr>
                 <th>Heat 1 On Temp</th>
@@ -53,18 +53,21 @@
         </thead>
         <tbody>
             <tr>
-                <td><input type="number" id="t1_on"  name="limit" min="60" max="87" ></td>
-                <td><input type="number" id="t1_off" name="limit" min="60" max="87"></td>
-                <td><input type="number" id="h1_on"  name="limit" min="60" max="87" ></td>
-                <td><input type="number" id="h1_off" name="limit" min="60" max="90"></td>
-                <td><input type="number" id="t2_on"  name="limit" min="60" max="87" ></td>
-                <td><input type="number" id="t2_off" name="limit" min="60" max="87" ></td>
-                <td><input type="number" id="delay"  name="limit" min="2"  max="999" ></td>
+                <td><input type="number" id="t1_on"  name="limit" min="60" max="87"  onchange="f_updates()"></td>
+                <td><input type="number" id="t1_off" name="limit" min="60" max="87"  onchange="f_updates()"></td>
+                <td><input type="number" id="h1_on"  name="limit" min="60" max="87"  onchange="f_updates()"></td>
+                <td><input type="number" id="h1_off" name="limit" min="60" max="90"  onchange="f_updates()"></td>
+                <td><input type="number" id="t2_on"  name="limit" min="60" max="87"  onchange="f_updates()"></td>
+                <td><input type="number" id="t2_off" name="limit" min="60" max="87"  onchange="f_updates()"></td>
+                <td><input type="number" id="delay"  name="limit" min="2"  max="999" onchange="f_updates()"></td>
                 <td></td>
             </tr>
         </tbody>
     </table>
-    <br></b>Current MCU Settings<p id="settings"></p>
+    <p name="settings"  hidden><b>Current MCU Settings (inbound, submitted)</b></p>
+    <p name="settings" id="message1" hidden></p>
+    <p name="settings" id="message2" hidden>N/A</p>
+
   </body>
   <script language = "javascript" type = "text/javascript">
 
@@ -72,11 +75,16 @@
       webSock.onopen    = function(evt){f_webSockOnOpen(evt);}
       webSock.onmessage = function(evt){f_webSockOnMessage(evt);}
       webSock.onerror   = function(evt){f_webSockOnError(evt);}
+      webSock.onclose   = function(evt){f_webSockOnClose(evt);}
+      function f_webSockOnClose(evt){console.log(evt);}
+
+      let updates = false; // websock updates when false; true after user param change
 
       function f_webSockOnMessage(evt){
+        if(updates)return;
         if(typeof evt.data === "string"){
           j=JSON.parse(evt.data);
-          document.getElementById("settings").innerHTML=evt.data;
+          document.getElementById("message1").innerHTML=evt.data;
             for(var key in j[1]){
                 if(j[1].hasOwnProperty(key)){
                     if(document.getElementById(key).value=="")
@@ -85,10 +93,10 @@
             }
         }
       }
-      function f_webSockOnOpen(evt){}
+      function f_webSockOnOpen(evt){webSock.send("Connect");}
       function f_webSockOnError(evt){}
       function f_submit(){
-        var str= '[{"t1":0,"h1":0,"t2":0},{"t1_on":75,"t1_off":82,"h1_on":75,"h1_off":85,"t2_on":75,"t2_off":80,"delay":7}]';
+        var str= '[{"t1":0,"h1":0,"t2":0},{"t1_on":75,"t1_off":82,"h1_on":75,"h1_off":85,"t2_on":75,"t2_off":80,"delay":7000}]';
         j=JSON.parse(str);
 
         for(var key in j[1]){
@@ -96,12 +104,28 @@
           j[1][key]=document.getElementById(key).value*1;
           if(key=="delay")j[1][key]=j[1][key]*1000;
         }
+        document.getElementById("message2").innerHTML = JSON.stringify(j);
         console.log("sending:", JSON.stringify(j));
         webSock.send(JSON.stringify(j));
+        updates = false;  // reset after refresh/submit
       }
       function f_refresh(){
         var x=document.getElementsByName("limit");
         for(var i=0;i<x.length;i++)x[i].value="";
+        updates = false;  // reset after refresh/submit
+        webSock.send("Connect");
+      }
+      function f_updates(){
+        updates = true;
+      }
+      function f_help(){
+        let v = document.getElementById("help");
+        let settings = document.getElementsByName("settings");
+
+        settings.forEach((setting) => {
+            setting.hidden = v.value=="Help"?false:true;
+          });
+          v.value=v.value=="Help"?"Un-Help":"Help";
       }
   </script>
 </html>
