@@ -44,7 +44,6 @@
                 <th>Humid 1 Off %</th>
                 <th>Heat 2 On Temp</th>
                 <th>Heat 2 Off Temp</th>
-                <th>Seconds Delay</th>
                 <th>
                   <input id="refresh" type="submit" value="Refresh" onclick="f_refresh()" style="margin: 1px; color: black; background-color: yellow; font-weight: bold;">
                   <input id="Submit" type="submit" value="Submit" onclick="f_submit()" style="margin: 2px; color: black; background-color: rgb(248, 138, 171); font-weight: bold;">
@@ -59,10 +58,24 @@
                 <td><input type="number" id="h1_off" name="limit" min="60" max="90"  onchange="f_updates()"></td>
                 <td><input type="number" id="t2_on"  name="limit" min="60" max="87"  onchange="f_updates()"></td>
                 <td><input type="number" id="t2_off" name="limit" min="60" max="87"  onchange="f_updates()"></td>
-                <td><input type="number" id="delay"  name="limit" min="2"  max="999" onchange="f_updates()"></td>
                 <td></td>
             </tr>
         </tbody>
+    </table>
+    <table class="calibrate">
+      <caption>Set internal delays</caption>
+      <thead>
+        <tr>
+          <th>Delay Between Reads sec.</th>
+          <th>DHT Power On Before Read sec.</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><input type="number" id="delay"  name="limit" min="2"  max="999" onchange="f_updates()"></td>
+          <td><input type="number" id="DHT_Hold" name="limit" min="2"  max="999" onchange="f_updates()"></td>
+        </tr>
+      </tbody>
     </table>
     <p name="settings"  hidden><b>Current MCU Settings (inbound, submitted)</b></p>
     <p name="settings" id="message1" hidden></p>
@@ -72,11 +85,10 @@
   <script language = "javascript" type = "text/javascript">
 
       let webSock       = new WebSocket('ws://'+window.location.hostname+':80');
-      webSock.onopen    = function(evt){f_webSockOnOpen(evt);}
+      webSock.onopen    = function(evt){webSock.send("Connect");}
       webSock.onmessage = function(evt){f_webSockOnMessage(evt);}
       webSock.onerror   = function(evt){f_webSockOnError(evt);}
       webSock.onclose   = function(evt){f_webSockOnClose(evt);}
-      function f_webSockOnClose(evt){console.log(evt);}
 
       let updates = false; // websock updates when false; true after user param change
 
@@ -93,10 +105,9 @@
             }
         }
       }
-      function f_webSockOnOpen(evt){webSock.send("Connect");}
       function f_webSockOnError(evt){}
       function f_submit(){
-        var str= '[{"t1":0,"h1":0,"t2":0},{"t1_on":75,"t1_off":82,"h1_on":75,"h1_off":85,"t2_on":75,"t2_off":80,"delay":7000}]';
+        var str= '[{"t1":0,"h1":0,"t2":0},{"t1_on":75,"t1_off":82,"h1_on":75,"h1_off":85,"t2_on":75,"t2_off":80,"delay":7000,"DHT_Hold":5}]';
         j=JSON.parse(str);
 
         for(var key in j[1]){

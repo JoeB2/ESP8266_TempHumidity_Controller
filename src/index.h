@@ -167,7 +167,6 @@ extern const char SET_BOUNDS_HTML[] PROGMEM =  R"=====(
                 <th>Humid 1 Off %</th>
                 <th>Heat 2 On Temp</th>
                 <th>Heat 2 Off Temp</th>
-                <th>Seconds Delay</th>
                 <th>
                   <input id="refresh" type="submit" value="Refresh" onclick="f_refresh()" style="margin: 1px; color: black; background-color: yellow; font-weight: bold;">
                   <input id="Submit" type="submit" value="Submit" onclick="f_submit()" style="margin: 2px; color: black; background-color: rgb(248, 138, 171); font-weight: bold;">
@@ -182,10 +181,24 @@ extern const char SET_BOUNDS_HTML[] PROGMEM =  R"=====(
                 <td><input type="number" id="h1_off" name="limit" min="60" max="90"  onchange="f_updates()"></td>
                 <td><input type="number" id="t2_on"  name="limit" min="60" max="87"  onchange="f_updates()"></td>
                 <td><input type="number" id="t2_off" name="limit" min="60" max="87"  onchange="f_updates()"></td>
-                <td><input type="number" id="delay"  name="limit" min="2"  max="999" onchange="f_updates()"></td>
                 <td></td>
             </tr>
         </tbody>
+    </table>
+    <table class="calibrate">
+      <caption>Set internal delays</caption>
+      <thead>
+        <tr>
+          <th>Delay Between Reads sec.</th>
+          <th>DHT Power On Before Read sec.</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><input type="number" id="delay"  name="limit" min="2"  max="999" onchange="f_updates()"></td>
+          <td><input type="number" id="DHT_Hold" name="limit" min="2"  max="999" onchange="f_updates()"></td>
+        </tr>
+      </tbody>
     </table>
     <p name="settings"  hidden><b>Current MCU Settings (inbound, submitted)</b></p>
     <p name="settings" id="message1" hidden></p>
@@ -195,11 +208,10 @@ extern const char SET_BOUNDS_HTML[] PROGMEM =  R"=====(
   <script language = "javascript" type = "text/javascript">
 
       let webSock       = new WebSocket('ws://'+window.location.hostname+':80');
-      webSock.onopen    = function(evt){f_webSockOnOpen(evt);}
+      webSock.onopen    = function(evt){webSock.send("Connect");}
       webSock.onmessage = function(evt){f_webSockOnMessage(evt);}
       webSock.onerror   = function(evt){f_webSockOnError(evt);}
       webSock.onclose   = function(evt){f_webSockOnClose(evt);}
-      function f_webSockOnClose(evt){console.log(evt);}
 
       let updates = false; // websock updates when false; true after user param change
 
@@ -216,10 +228,9 @@ extern const char SET_BOUNDS_HTML[] PROGMEM =  R"=====(
             }
         }
       }
-      function f_webSockOnOpen(evt){webSock.send("Connect");}
       function f_webSockOnError(evt){}
       function f_submit(){
-        var str= '[{"t1":0,"h1":0,"t2":0},{"t1_on":75,"t1_off":82,"h1_on":75,"h1_off":85,"t2_on":75,"t2_off":80,"delay":7000}]';
+        var str= '[{"t1":0,"h1":0,"t2":0},{"t1_on":75,"t1_off":82,"h1_on":75,"h1_off":85,"t2_on":75,"t2_off":80,"delay":7000,"DHT_Hold":5}]';
         j=JSON.parse(str);
 
         for(var key in j[1]){
@@ -270,7 +281,7 @@ extern const char SET_BOUNDS_HTML[] PROGMEM =  R"=====(
   <body style="text-align: left;">
     <hr>
       <table class="calibrate">
-        <caption style="font-weight: bolder;">Set Temp & Humidty Relays SSID : PWD</caption>
+        <caption style="font-weight: bolder;">Set Temp & Humidity Relays SSID : PWD</caption>
           <thead>
               <tr>
                   <th>SSID</th>
@@ -279,32 +290,53 @@ extern const char SET_BOUNDS_HTML[] PROGMEM =  R"=====(
           </thead>
           <tbody>
               <tr>
-                  <td><input type="text" id="SSID" name="cred" onchange="f_update()"></td>
-                  <td><input type="text" id="PWD" name="cred" onchange="f_update()"></td>
-                  <td><input type="submit" id="submit" onclick="f_submit()"></td>
+                  <td><input type="text" id="SSID" name="cred" onchange="f_update()" placeholder="WiFi SSID"/></td>
+                  <td><input type="text" id="PWD" name="cred" onchange="f_update()" placeholder="WiFi PWD"/></td>
+                  <td><input type="submit" id="submit" onclick="f_submit()" hidden=isDHCP.checked></td>
               </tr>
           </tbody></table>
 
 
       <br>
       <label for="dhcp">DHCP:</label><input type="checkbox" id="isDHCP" onclick="f_dhcp(checked)">
-      <br><br>
+      <table class="calibrate">
+        <tbody>
+          <tr>
+            <td>
+               <input type="text"  id="IP"  name="dhcp"
+                style="width: 7rem;" onchange="f_update()" placeholder="Fixed IP"
+                minlength="7" maxlength="15" size="15"
+                required pattern="^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$">
+            </td>
 
-      <label for="ip"      name="dhcp">IP: </label>     <input type="text"  id="IP"  name="dhcp" style="width: 7rem;" onchange="f_update()">
-      <label for="gateway" name="dhcp">Gateway: </label><input type="text" id="GW"   name="dhcp" style="width: 7rem;" onchange="f_update()">
-      <label for="mask"    name="dhcp">Mask: </label>   <input type="text" id="MASK" name="dhcp" style="width: 7rem;" onchange="f_update()">
+            <td>
+              <input type="text" id="GW"   name="dhcp"
+                style="width: 7rem;" onchange="f_update()" placeholder="Network Gateway"
+                minlength="7" maxlength="15" size="15"
+                required pattern="^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$">
+        </td>
+
+        <td>
+          <input type="text" id="MASK" name="dhcp"
+           style="width: 7rem;" onchange="f_update()" placeholder="Network Mask"
+           minlength="7" maxlength="15" size="15"
+           required pattern="^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$">
+          </td>
+
+           <td><input type="submit" name="dhcp" id="submit2" onclick="f_submit()"></td>
       <br><p id="status"></p>
     </body>
     <script language = "javascript" type = "text/javascript">
   
         let webSock       = new WebSocket('ws://'+window.location.hostname+':80');
-        webSock.onopen    = function(evt){webSock.send("Connect");}
+        webSock.onopen    = function(evt){}
         webSock.onmessage = function(evt){f_webSockOnMessage(evt);}
         webSock.onerror   = function(evt){f_webSockOnError(evt);}
         var str= '{"SSID":"0","PWD":"0", "IP":"0","GW":"0","MASK":"0","isDHCP":false}';
         let updates = false;
 
         function f_webSockOnMessage(evt){
+          console.log(evt.data);
           if(updates)return;
           if(typeof evt.data === "string"){
               document.getElementById("status").innerHTML=evt.data;
@@ -327,8 +359,13 @@ extern const char SET_BOUNDS_HTML[] PROGMEM =  R"=====(
         }
         function f_dhcp(checked){
           const n=document.getElementsByName("dhcp");
-          if(checked)for(var i=0;i<n.length;i++)n[i].setAttribute("hidden", "hidden");
-          else for(var i=0;i<n.length;i++)n[i].removeAttribute("hidden");
+          if(checked){
+            for(var i=0;i<n.length;i++)n[i].setAttribute("hidden", "hidden");
+            document.getElementById("submit").removeAttribute("hidden");
+          }else{
+            for(var i=0;i<n.length;i++)n[i].removeAttribute("hidden");
+            document.getElementById("submit").setAttribute("hidden", "hidden");
+          }
           updates=true;
         }
         function f_update(){
